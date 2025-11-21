@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { showSuccessNotification, showErrorNotification } from "@/lib/notification"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -29,9 +30,11 @@ export default function LoginPage() {
 
     const success = await login(nisOrUsername, password)
     if (success) {
+      showSuccessNotification("Login Berhasil", "Selamat datang kembali!")
       router.push("/dashboard")
     } else {
       setError("NIS/Username atau password salah")
+      showErrorNotification("Login Gagal", "NIS/Username atau password salah")
       setPassword("")
     }
     setLoading(false)
@@ -56,6 +59,7 @@ export default function LoginPage() {
                 onChange={(e) => setNisOrUsername(e.target.value)}
                 className="w-full px-4 py-3 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 required
+                disabled={loading}
               />
             </div>
 
@@ -68,6 +72,7 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full px-4 py-3 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 required
+                disabled={loading}
               />
             </div>
 

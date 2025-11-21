@@ -5,9 +5,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { TransactionCard } from "@/components/transaction-card"
 import { formatCurrency } from "@/lib/formatting"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Wallet, TrendingDown, TrendingUp } from "lucide-react"
 import * as XLSX from "xlsx"
+import { showSuccessNotification, showErrorNotification } from "@/lib/notification"
+import { supabase } from "@/lib/supabase"
 
 interface Transaction {
   id: number
@@ -21,119 +23,87 @@ interface Transaction {
   created_at: string | Date
 }
 
-const mockTransactions: Transaction[] = [
-  {
-    id: 1,
-    nis: "0002",
-    full_name: "M. Hanan Izzaturrofan",
-    username: "siswa1",
-    nominal: 5000,
-    description: "Pembayaran Kas Mingguan",
-    type: "pemasukan",
-    status: "approved",
-    created_at: new Date("2024-11-03"),
-  },
-  {
-    id: 2,
-    nis: "0002",
-    full_name: "M. Hanan Izzaturrofan",
-    username: "siswa1",
-    nominal: 5000,
-    description: "Pembayaran Kas Mingguan",
-    type: "pemasukan",
-    status: "approved",
-    created_at: new Date("2024-11-03"),
-  },
-  {
-    id: 3,
-    nis: "0002",
-    full_name: "M. Hanan Izzaturrofan",
-    username: "siswa1",
-    nominal: 5000,
-    description: "Pembayaran Kas Mingguan",
-    type: "pemasukan",
-    status: "approved",
-    created_at: new Date("2024-11-03"),
-  },
-  {
-    id: 4,
-    nis: "0002",
-    full_name: "M. Hanan Izzaturrofan",
-    username: "siswa1",
-    nominal: 5000,
-    description: "Pembayaran Kas Mingguan",
-    type: "pemasukan",
-    status: "approved",
-    created_at: new Date("2024-11-03"),
-  },
-  {
-    id: 5,
-    nis: "0001",
-    full_name: "Admin User",
-    username: "admin",
-    nominal: 100000,
-    description: "Pembelian Perlengkapan Event",
-    type: "pengeluaran",
-    status: "approved",
-    created_at: new Date("2024-11-04"),
-  },
-  {
-    id: 6,
-    nis: "0001",
-    full_name: "Admin User",
-    username: "admin",
-    nominal: 50000,
-    description: "Pembayaran Catering",
-    type: "pengeluaran",
-    status: "approved",
-    created_at: new Date("2024-11-04"),
-  },
-]
-
 export function ReportsContent() {
   const { user } = useAuth()
   const [filterType, setFilterType] = useState<"all" | "pemasukan" | "pengeluaran">("all")
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const approvedTransactions = mockTransactions.filter((t) => t.status === "approved")
-  const totalIncome = approvedTransactions.filter((t) => t.type === "pemasukan").reduce((sum, t) => sum + t.nominal, 0)
-  const totalExpense = approvedTransactions
-    .filter((t) => t.type === "pengeluaran")
-    .reduce((sum, t) => sum + t.nominal, 0)
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        setLoading(true)
+        const { data, error } = await supabase
+          .from("transactions")
+          .select("*")
+          .eq("status", "approved")
+          .order("created_at", { ascending: false })
+
+        if (error) {
+          console.error("Error fetching transactions:", error)
+          setTransactions([])
+        } else {
+          setTransactions(data || [])
+        }
+      } catch (error) {
+        console.error("Error:", error)
+        setTransactions([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchTransactions()
+  }, [])
+
+  const approvedTransactions = transactions
+
+  const totalIncome =
+    approvedTransactions.filter((t) => t.type === "pemasukan").reduce((sum, t) => sum + t.nominal, 0) || 0
+  const totalExpense =
+    approvedTransactions.filter((t) => t.type === "pengeluaran").reduce((sum, t) => sum + t.nominal, 0) || 0
   const totalBalance = totalIncome - totalExpense
 
   const filteredTransactions =
     filterType === "all" ? approvedTransactions : approvedTransactions.filter((t) => t.type === filterType)
 
   const exportToExcel = (type: "pemasukan" | "pengeluaran" | "all") => {
-    let data = approvedTransactions
+    try {
+      let data = approvedTransactions
 
-    if (type !== "all") {
-      data = data.filter((t) => t.type === type)
+      if (type !== "all") {
+        data = data.filter((t) => t.type === type)
+      }
+
+      const excelData = data.map((t) => ({
+        "Nama Lengkap": t.full_name,
+        Username: t.username,
+        Nominal: t.nominal,
+        Keterangan: t.description,
+        Tanggal: new Date(t.created_at).toLocaleDateString("id-ID"),
+      }))
+
+      const totalNominal = data.reduce((sum, t) => sum + t.nominal, 0) || 0
+      excelData.push({
+        "Nama Lengkap": "",
+        Username: "TOTAL",
+        Nominal: totalNominal,
+        Keterangan: "",
+        Tanggal: "",
+      })
+
+      const worksheet = XLSX.utils.json_to_sheet(excelData)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan")
+
+      const fileName = `Laporan-${type}-${new Date().toLocaleDateString("id-ID")}.xlsx`
+      XLSX.writeFile(workbook, fileName)
+
+      showSuccessNotification("Berhasil", `Laporan ${type} berhasil diexport`)
+    } catch (error) {
+      console.error("Export error:", error)
+      showErrorNotification("Gagal", "Tidak dapat mengexport file Excel")
     }
-
-    const excelData = data.map((t) => ({
-      "Nama Lengkap": t.full_name,
-      Username: t.username,
-      Nominal: t.nominal,
-      Keterangan: t.description,
-      Tanggal: new Date(t.created_at).toLocaleDateString("id-ID"),
-    }))
-
-    const totalNominal = data.reduce((sum, t) => sum + t.nominal, 0)
-    excelData.push({
-      "Nama Lengkap": "",
-      Username: "TOTAL",
-      Nominal: totalNominal,
-      Keterangan: "",
-      Tanggal: "",
-    })
-
-    const worksheet = XLSX.utils.json_to_sheet(excelData)
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan")
-
-    const fileName = `Laporan-${type}-${new Date().toLocaleDateString("id-ID")}.xlsx`
-    XLSX.writeFile(workbook, fileName)
   }
 
   return (

@@ -7,6 +7,7 @@ import { TransactionCard } from "@/components/transaction-card"
 import { formatCurrency } from "@/lib/formatting"
 import { Wallet, TrendingDown, ChevronDown, ChevronUp } from "lucide-react"
 import { useState, useEffect } from "react"
+import { supabase } from "@/lib/supabase"
 
 interface Transaction {
   id: number
@@ -20,80 +21,38 @@ interface Transaction {
   created_at: string | Date
 }
 
-const mockTransactions: Transaction[] = [
-  {
-    id: 1,
-    nis: "0002",
-    full_name: "M. Hanan Izzaturrofan",
-    username: "siswa1",
-    nominal: 5000,
-    description: "Pembayaran Kas Mingguan",
-    type: "pemasukan",
-    status: "approved",
-    created_at: new Date("2024-11-03"),
-  },
-  {
-    id: 2,
-    nis: "0002",
-    full_name: "M. Hanan Izzaturrofan",
-    username: "siswa1",
-    nominal: 5000,
-    description: "Pembayaran Kas Mingguan",
-    type: "pemasukan",
-    status: "approved",
-    created_at: new Date("2024-11-03"),
-  },
-  {
-    id: 3,
-    nis: "0002",
-    full_name: "M. Hanan Izzaturrofan",
-    username: "siswa1",
-    nominal: 5000,
-    description: "Pembayaran Kas Mingguan",
-    type: "pemasukan",
-    status: "approved",
-    created_at: new Date("2024-11-03"),
-  },
-  {
-    id: 4,
-    nis: "0002",
-    full_name: "M. Hanan Izzaturrofan",
-    username: "siswa1",
-    nominal: 5000,
-    description: "Pembayaran Kas Mingguan",
-    type: "pemasukan",
-    status: "approved",
-    created_at: new Date("2024-11-03"),
-  },
-  {
-    id: 5,
-    nis: "0001",
-    full_name: "Admin User",
-    username: "admin",
-    nominal: 100000,
-    description: "Pembelian Perlengkapan Event",
-    type: "pengeluaran",
-    status: "approved",
-    created_at: new Date("2024-11-04"),
-  },
-  {
-    id: 6,
-    nis: "0001",
-    full_name: "Admin User",
-    username: "admin",
-    nominal: 50000,
-    description: "Pembayaran Catering",
-    type: "pengeluaran",
-    status: "approved",
-    created_at: new Date("2024-11-05"),
-  },
-]
-
 export function DashboardContent() {
   const { user } = useAuth()
-  const [transactions, setTransactions] = useState<Transaction[]>(mockTransactions)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
   const [userTransactions, setUserTransactions] = useState<Transaction[]>([])
   const [showAllTransactions, setShowAllTransactions] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      try {
+        setLoading(true)
+        const { data, error } = await supabase
+          .from("transactions")
+          .select("*")
+          .order("created_at", { ascending: false })
+
+        if (error) {
+          console.error("Error fetching transactions:", error)
+          setTransactions([])
+        } else {
+          setTransactions(data || [])
+        }
+      } catch (error) {
+        console.error("Error:", error)
+        setTransactions([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchTransactions()
+  }, [])
 
   useEffect(() => {
     if (user?.role === "admin") {
@@ -103,13 +62,15 @@ export function DashboardContent() {
     }
   }, [user, transactions])
 
-  const totalIncome = transactions
-    .filter((t) => t.type === "pemasukan" && t.status === "approved")
-    .reduce((sum, t) => sum + t.nominal, 0)
+  const totalIncome =
+    transactions
+      .filter((t) => t.type === "pemasukan" && t.status === "approved")
+      .reduce((sum, t) => sum + t.nominal, 0) || 0
 
-  const totalExpense = transactions
-    .filter((t) => t.type === "pengeluaran" && t.status === "approved")
-    .reduce((sum, t) => sum + t.nominal, 0)
+  const totalExpense =
+    transactions
+      .filter((t) => t.type === "pengeluaran" && t.status === "approved")
+      .reduce((sum, t) => sum + t.nominal, 0) || 0
 
   const totalBalance = totalIncome - totalExpense
   const displayedTransactions = showAllTransactions ? userTransactions : userTransactions.slice(0, 4)
@@ -156,9 +117,13 @@ export function DashboardContent() {
       <div>
         <h2 className="text-xl font-bold mb-4">Riwayat Transaksi</h2>
         <div className={`space-y-3 ${showAllTransactions ? "max-h-96 overflow-y-auto pr-2" : ""}`}>
-          {displayedTransactions.map((transaction) => (
-            <TransactionCard key={transaction.id} transaction={transaction} />
-          ))}
+          {displayedTransactions.length > 0 ? (
+            displayedTransactions.map((transaction) => (
+              <TransactionCard key={transaction.id} transaction={transaction} />
+            ))
+          ) : (
+            <p className="text-center text-muted-foreground py-8">Tidak ada transaksi</p>
+          )}
         </div>
 
         {userTransactions.length > 4 && (

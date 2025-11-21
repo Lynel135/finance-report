@@ -3,24 +3,31 @@
 import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { supabase } from "@/lib/supabase"
+import { showSuccessNotification, showErrorNotification } from "@/lib/notification"
+import { logTransaction } from "@/lib/logger"
 
 interface TransactionModalProps {
   isOpen: boolean
   onClose: () => void
   userId: string
   userRole: "admin" | "user"
+  onTransactionAdded?: () => void
 }
 
-export function TransactionModal({ isOpen, onClose, userId, userRole }: TransactionModalProps) {
+export function TransactionModal({ isOpen, onClose, userId, userRole, onTransactionAdded }: TransactionModalProps) {
   const [nominal, setNominal] = useState("")
   const [description, setDescription] = useState("")
   const [type, setType] = useState<"pemasukan" | "pengeluaran">("pemasukan")
+  const [loading, setLoading] = useState(false)
 
   const handleSave = async () => {
     if (!nominal || !description) {
-      alert("Harap isi semua field")
+      showErrorNotification("Error", "Harap isi semua field")
       return
     }
+
+    setLoading(true)
 
     const transactionData = {
       nis: userId,
@@ -28,17 +35,39 @@ export function TransactionModal({ isOpen, onClose, userId, userRole }: Transact
       description,
       type,
       status: userRole === "admin" ? "approved" : "pending",
-      created_at: new Date(),
+      created_at: new Date().toISOString(),
     }
 
-    // TODO: Implement API call to save transaction
-    console.log("Transaction data:", transactionData)
+    try {
+      const { data, error } = await supabase.from("transactions").insert([transactionData]).select()
 
-    // Reset form and close modal
-    setNominal("")
-    setDescription("")
-    setType("pemasukan")
-    onClose()
+      if (error) {
+        console.error("Supabase error:", error)
+        logTransaction({ ...transactionData, error: error.message })
+        showErrorNotification("Gagal", "Tidak dapat menambahkan transaksi ke database")
+        return
+      }
+
+      logTransaction(transactionData)
+
+      if (userRole === "admin") {
+        showSuccessNotification("Berhasil", "Transaksi telah ditambahkan dan langsung disetujui")
+      } else {
+        showSuccessNotification("Berhasil", "Transaksi telah ditambahkan dan menunggu persetujuan")
+      }
+
+      // Reset form and close modal
+      setNominal("")
+      setDescription("")
+      setType("pemasukan")
+      onClose()
+      onTransactionAdded?.()
+    } catch (error) {
+      console.error("Error adding transaction:", error)
+      showErrorNotification("Error", "Terjadi kesalahan saat menambahkan transaksi")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -57,6 +86,7 @@ export function TransactionModal({ isOpen, onClose, userId, userRole }: Transact
               value={nominal}
               onChange={(e) => setNominal(e.target.value)}
               className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              disabled={loading}
             />
           </div>
 
@@ -68,6 +98,7 @@ export function TransactionModal({ isOpen, onClose, userId, userRole }: Transact
               onChange={(e) => setDescription(e.target.value)}
               className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary resize-none"
               rows={3}
+              disabled={loading}
             />
           </div>
 
@@ -80,6 +111,7 @@ export function TransactionModal({ isOpen, onClose, userId, userRole }: Transact
                   value="pemasukan"
                   checked={type === "pemasukan"}
                   onChange={(e) => setType(e.target.value as "pemasukan" | "pengeluaran")}
+                  disabled={loading}
                 />
                 <span>Pemasukan</span>
               </label>
@@ -89,14 +121,15 @@ export function TransactionModal({ isOpen, onClose, userId, userRole }: Transact
                   value="pengeluaran"
                   checked={type === "pengeluaran"}
                   onChange={(e) => setType(e.target.value as "pemasukan" | "pengeluaran")}
+                  disabled={loading}
                 />
                 <span>Pengeluaran</span>
               </label>
             </div>
           </div>
 
-          <Button onClick={handleSave} className="w-full">
-            Simpan
+          <Button onClick={handleSave} className="w-full" disabled={loading}>
+            {loading ? "Menyimpan..." : "Simpan"}
           </Button>
         </div>
       </DialogContent>
