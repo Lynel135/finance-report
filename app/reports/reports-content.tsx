@@ -35,7 +35,16 @@ export function ReportsContent() {
         setLoading(true)
         const { data, error } = await supabase
           .from("transactions")
-          .select("*")
+          .select(`
+            id,
+            nis,
+            nominal,
+            description,
+            type,
+            status,
+            created_at,
+            users (full_name, username)
+          `)
           .eq("status", "approved")
           .order("created_at", { ascending: false })
 
@@ -43,7 +52,18 @@ export function ReportsContent() {
           console.error("Error fetching transactions:", error)
           setTransactions([])
         } else {
-          setTransactions(data || [])
+          const mappedData = (data || []).map((transaction: any) => ({
+            id: transaction.id,
+            nis: transaction.nis,
+            full_name: transaction.users?.full_name || "",
+            username: transaction.users?.username || "",
+            nominal: transaction.nominal,
+            description: transaction.description,
+            type: transaction.type,
+            status: transaction.status,
+            created_at: transaction.created_at,
+          }))
+          setTransactions(mappedData)
         }
       } catch (error) {
         console.error("Error:", error)

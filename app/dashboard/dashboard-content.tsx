@@ -34,14 +34,35 @@ export function DashboardContent() {
         setLoading(true)
         const { data, error } = await supabase
           .from("transactions")
-          .select("*")
+          .select(`
+            id,
+            nis,
+            nominal,
+            description,
+            type,
+            status,
+            created_at,
+            users (full_name, username)
+          `)
           .order("created_at", { ascending: false })
 
         if (error) {
           console.error("Error fetching transactions:", error)
           setTransactions([])
         } else {
-          setTransactions(data || [])
+          // Map the data to flatten the users relationship
+          const mappedData = (data || []).map((transaction: any) => ({
+            id: transaction.id,
+            nis: transaction.nis,
+            full_name: transaction.users?.full_name || "",
+            username: transaction.users?.username || "",
+            nominal: transaction.nominal,
+            description: transaction.description,
+            type: transaction.type,
+            status: transaction.status,
+            created_at: transaction.created_at,
+          }))
+          setTransactions(mappedData)
         }
       } catch (error) {
         console.error("Error:", error)
