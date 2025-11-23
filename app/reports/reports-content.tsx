@@ -95,32 +95,51 @@ export function ReportsContent() {
         data = data.filter((t) => t.type === type)
       }
 
-      const excelData = data.map((t) => ({
-        "Nama Lengkap": t.full_name,
-        Username: t.username,
-        Nominal: t.nominal,
-        Keterangan: t.description,
-        Tanggal: new Date(t.created_at).toLocaleDateString("id-ID"),
-      }))
+      let excelData: any[] = []
 
-      let totalNominal = 0
       if (type === "all") {
+        excelData = approvedTransactions.map((t) => ({
+          "Nama Lengkap": t.full_name,
+          Username: t.username,
+          Keterangan: t.description,
+          Pemasukan: t.type === "pemasukan" ? t.nominal : "",
+          Pengeluaran: t.type === "pengeluaran" ? t.nominal : "",
+          Tanggal: new Date(t.created_at).toLocaleDateString("id-ID"),
+        }))
+
         const incomeTotal =
           approvedTransactions.filter((t) => t.type === "pemasukan").reduce((sum, t) => sum + t.nominal, 0) || 0
         const expenseTotal =
           approvedTransactions.filter((t) => t.type === "pengeluaran").reduce((sum, t) => sum + t.nominal, 0) || 0
-        totalNominal = incomeTotal - expenseTotal
-      } else {
-        totalNominal = data.reduce((sum, t) => sum + t.nominal, 0) || 0
-      }
+        const totalBalance = incomeTotal - expenseTotal
 
-      excelData.push({
-        "Nama Lengkap": "",
-        Username: "TOTAL",
-        Nominal: totalNominal,
-        Keterangan: "",
-        Tanggal: "",
-      })
+        excelData.push({
+          "Nama Lengkap": "",
+          Username: "TOTAL",
+          Keterangan: "",
+          Pemasukan: incomeTotal,
+          Pengeluaran: expenseTotal,
+          Tanggal: totalBalance,
+        })
+      } else {
+        excelData = data.map((t) => ({
+          "Nama Lengkap": t.full_name,
+          Username: t.username,
+          Nominal: t.nominal,
+          Keterangan: t.description,
+          Tanggal: new Date(t.created_at).toLocaleDateString("id-ID"),
+        }))
+
+        const totalNominal = data.reduce((sum, t) => sum + t.nominal, 0) || 0
+
+        excelData.push({
+          "Nama Lengkap": "",
+          Username: "TOTAL",
+          Nominal: totalNominal,
+          Keterangan: "",
+          Tanggal: "",
+        })
+      }
 
       const worksheet = XLSX.utils.json_to_sheet(excelData)
       const workbook = XLSX.utils.book_new()

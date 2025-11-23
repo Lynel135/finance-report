@@ -5,9 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { TransactionCard } from "@/components/transaction-card"
 import { formatCurrency } from "@/lib/formatting"
-import { Wallet, TrendingDown, ChevronDown, ChevronUp } from "lucide-react"
+import { Wallet, TrendingDown, ChevronDown, ChevronUp, Check, X } from "lucide-react"
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabase"
+import { showSuccessNotification, showErrorNotification } from "@/lib/notification"
 
 interface Transaction {
   id: number
@@ -28,6 +29,7 @@ export function DashboardContent() {
   const [userTransactions, setUserTransactions] = useState<Transaction[]>([])
   const [showAllTransactions, setShowAllTransactions] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [approvalLoading, setApprovalLoading] = useState(false)
 
   useEffect(() => {
     const fetchTransactions = async () => {
@@ -85,6 +87,136 @@ export function DashboardContent() {
       )
     }
   }, [user, transactions])
+
+  const handleApproveTransaction = async (transactionId: number) => {
+    try {
+      setApprovalLoading(true)
+      const { error } = await supabase.from("transactions").update({ status: "approved" }).eq("id", transactionId)
+
+      if (error) {
+        showErrorNotification("Gagal", "Tidak dapat menyetujui transaksi")
+      } else {
+        showSuccessNotification("Berhasil", "Transaksi telah disetujui")
+        // Refresh pending transactions
+        const { data } = await supabase
+          .from("transactions")
+          .select(`
+            id,
+            nis,
+            nominal,
+            description,
+            type,
+            status,
+            created_at,
+            users (full_name, username)
+          `)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+
+        if (data) {
+          const mappedData = data.map((transaction: any) => ({
+            id: transaction.id,
+            nis: transaction.nis,
+            full_name: transaction.users?.full_name || "",
+            username: transaction.users?.username || "",
+            nominal: transaction.nominal,
+            description: transaction.description,
+            type: transaction.type,
+            status: transaction.status,
+            created_at: transaction.created_at,
+          }))
+          setPendingTransactions(mappedData)
+        }
+      }
+    } catch (error) {
+      showErrorNotification("Gagal", "Terjadi kesalahan saat menyetujui transaksi")
+    } finally {
+      setApprovalLoading(false)
+    }
+  }
+
+  const handleRejectTransaction = async (transactionId: number) => {
+    try {
+      setApprovalLoading(true)
+      const { error } = await supabase.from("transactions").update({ status: "rejected" }).eq("id", transactionId)
+
+      if (error) {
+        showErrorNotification("Gagal", "Tidak dapat menolak transaksi")
+      } else {
+        showSuccessNotification("Berhasil", "Transaksi telah ditolak dan akan dihapus dalam 1 hari")
+        // Refresh pending transactions
+        const { data } = await supabase
+          .from("transactions")
+          .select(`
+            id,
+            nis,
+            nominal,
+            description,
+            type,
+            status,
+            created_at,
+            users (full_name, username)
+          `)
+          .eq("status", "pending")
+          .order("created_at", { ascending: false })
+
+        if (data) {
+          const mappedData = data.map((transaction: any) => ({
+            id: transaction.id,
+            nis: transaction.nis,
+            full_name: transaction.users?.full_name || "",
+            username: transaction.users?.username || "",
+            nominal: transaction.nominal,
+            description: transaction.description,
+            type: transaction.type,
+            status: transaction.status,
+            created_at: transaction.created_at,
+          }))
+          setPendingTransactions(mappedData)
+        }
+      }
+    } catch (error) {
+      showErrorNotification("Gagal", "Terjadi kesalahan saat menolak transaksi")
+    } finally {
+      setApprovalLoading(false)
+    }
+  }
+
+  const handleApproveAll = async () => {
+    try {
+      setApprovalLoading(true)
+      const { error } = await supabase.from("transactions").update({ status: "approved" }).eq("status", "pending")
+
+      if (error) {
+        showErrorNotification("Gagal", "Tidak dapat menyetujui semua transaksi")
+      } else {
+        showSuccessNotification("Berhasil", `${pendingTransactions.length} transaksi telah disetujui`)
+        setPendingTransactions([])
+      }
+    } catch (error) {
+      showErrorNotification("Gagal", "Terjadi kesalahan saat menyetujui semua transaksi")
+    } finally {
+      setApprovalLoading(false)
+    }
+  }
+
+  const handleRejectAll = async () => {
+    try {
+      setApprovalLoading(true)
+      const { error } = await supabase.from("transactions").update({ status: "rejected" }).eq("status", "pending")
+
+      if (error) {
+        showErrorNotification("Gagal", "Tidak dapat menolak semua transaksi")
+      } else {
+        showSuccessNotification("Berhasil", `${pendingTransactions.length} transaksi telah ditolak`)
+        setPendingTransactions([])
+      }
+    } catch (error) {
+      showErrorNotification("Gagal", "Terjadi kesalahan saat menolak semua transaksi")
+    } finally {
+      setApprovalLoading(false)
+    }
+  }
 
   const totalIncome =
     transactions
@@ -177,12 +309,33 @@ export function DashboardContent() {
           <CardHeader>
             <CardTitle className="text-lg">Transaksi Menunggu Persetujuan</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            {pendingTransactions.length > 0 && (
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleApproveAll}
+                  disabled={approvalLoading}
+                  className="flex-1 gap-2 bg-success hover:bg-success/90"
+                >
+                  <Check size={18} />
+                  Setujui Semua
+                </Button>
+                <Button
+                  onClick={handleRejectAll}
+                  disabled={approvalLoading}
+                  className="flex-1 gap-2 bg-destructive hover:bg-destructive/90"
+                >
+                  <X size={18} />
+                  Tolak Semua
+                </Button>
+              </div>
+            )}
+
             <div className="space-y-3 max-h-64 overflow-y-auto">
               {pendingTransactions.length > 0 ? (
                 pendingTransactions.map((transaction) => (
-                  <div key={transaction.id} className="p-3 border rounded-lg bg-muted/50">
-                    <div className="flex justify-between items-start mb-2">
+                  <div key={transaction.id} className="p-3 border rounded-lg bg-muted/50 space-y-2">
+                    <div className="flex justify-between items-start">
                       <div className="flex-1">
                         <p className="font-medium">{transaction.description}</p>
                         <p className="text-sm text-muted-foreground">
@@ -204,6 +357,26 @@ export function DashboardContent() {
                         minute: "2-digit",
                       })}
                     </p>
+                    <div className="flex gap-2 pt-2">
+                      <Button
+                        onClick={() => handleApproveTransaction(transaction.id)}
+                        disabled={approvalLoading}
+                        size="sm"
+                        className="flex-1 gap-1 bg-success hover:bg-success/90"
+                      >
+                        <Check size={16} />
+                        Setujui
+                      </Button>
+                      <Button
+                        onClick={() => handleRejectTransaction(transaction.id)}
+                        disabled={approvalLoading}
+                        size="sm"
+                        className="flex-1 gap-1 bg-destructive hover:bg-destructive/90"
+                      >
+                        <X size={16} />
+                        Tolak
+                      </Button>
+                    </div>
                   </div>
                 ))
               ) : (
