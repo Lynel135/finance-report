@@ -24,6 +24,7 @@ interface Transaction {
 export function DashboardContent() {
   const { user } = useAuth()
   const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [pendingTransactions, setPendingTransactions] = useState<Transaction[]>([])
   const [userTransactions, setUserTransactions] = useState<Transaction[]>([])
   const [showAllTransactions, setShowAllTransactions] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -50,7 +51,6 @@ export function DashboardContent() {
           console.error("Error fetching transactions:", error)
           setTransactions([])
         } else {
-          // Map the data to flatten the users relationship
           const mappedData = (data || []).map((transaction: any) => ({
             id: transaction.id,
             nis: transaction.nis,
@@ -63,6 +63,7 @@ export function DashboardContent() {
             created_at: transaction.created_at,
           }))
           setTransactions(mappedData)
+          setPendingTransactions(mappedData.filter((t) => t.status === "pending"))
         }
       } catch (error) {
         console.error("Error:", error)
@@ -77,9 +78,11 @@ export function DashboardContent() {
 
   useEffect(() => {
     if (user?.role === "admin") {
-      setUserTransactions(transactions)
+      setUserTransactions(transactions.filter((t) => t.status === "approved" || t.nis === user?.nis))
     } else {
-      setUserTransactions(transactions.filter((t) => t.nis === user?.nis))
+      setUserTransactions(
+        transactions.filter((t) => t.status === "approved" || (t.status === "pending" && t.nis === user?.nis)),
+      )
     }
   }, [user, transactions])
 
@@ -175,8 +178,37 @@ export function DashboardContent() {
             <CardTitle className="text-lg">Transaksi Menunggu Persetujuan</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-center py-8">
-              <p className="text-muted-foreground mb-4">Tidak ada transaksi yang menunggu</p>
+            <div className="space-y-3 max-h-64 overflow-y-auto">
+              {pendingTransactions.length > 0 ? (
+                pendingTransactions.map((transaction) => (
+                  <div key={transaction.id} className="p-3 border rounded-lg bg-muted/50">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex-1">
+                        <p className="font-medium">{transaction.description}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {transaction.full_name} (@{transaction.username})
+                        </p>
+                      </div>
+                      <span
+                        className={`text-lg font-bold ${transaction.type === "pemasukan" ? "text-success" : "text-destructive"}`}
+                      >
+                        {transaction.type === "pemasukan" ? "+" : "-"} Rp {transaction.nominal.toLocaleString("id-ID")}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(transaction.created_at).toLocaleDateString("id-ID", {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-center text-muted-foreground py-8">Tidak ada transaksi yang menunggu</p>
+              )}
             </div>
           </CardContent>
         </Card>

@@ -4,6 +4,8 @@ import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/lib/auth-context"
+import { supabase } from "@/lib/supabase"
+import { showSuccessNotification, showErrorNotification } from "@/lib/notification"
 
 interface EditProfileModalProps {
   isOpen: boolean
@@ -16,8 +18,9 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setError("")
 
     if (!username.trim()) {
@@ -30,11 +33,35 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
       return
     }
 
-    // TODO: Implement API call to update profile
-    console.log({ username, password })
+    try {
+      setLoading(true)
 
-    alert("Profil berhasil diperbarui")
-    onClose()
+      const updateData: any = { username }
+      if (password) {
+        updateData.password = password
+      }
+
+      const { error: updateError } = await supabase.from("users").update(updateData).eq("nis", user?.nis)
+
+      if (updateError) {
+        showErrorNotification("Gagal", "Tidak dapat memperbarui profil")
+        return
+      }
+
+      // Update localStorage
+      if (user) {
+        const updatedUser = { ...user, username }
+        localStorage.setItem("auth_user", JSON.stringify(updatedUser))
+      }
+
+      showSuccessNotification("Berhasil", "Profil berhasil diperbarui")
+      onClose()
+    } catch (err) {
+      console.error("Error updating profile:", err)
+      showErrorNotification("Gagal", "Terjadi kesalahan saat memperbarui profil")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -51,7 +78,8 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
               type="text"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              disabled={loading}
+              className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
             />
           </div>
 
@@ -62,7 +90,8 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
               placeholder="Kosongkan jika tidak ingin mengubah"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              disabled={loading}
+              className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
             />
           </div>
 
@@ -73,18 +102,19 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
               placeholder="Konfirmasi password baru"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+              disabled={loading}
+              className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
             />
           </div>
 
           {error && <div className="text-destructive text-sm">{error}</div>}
 
           <div className="flex gap-2 pt-4">
-            <Button variant="outline" onClick={onClose} className="flex-1 bg-transparent">
+            <Button variant="outline" onClick={onClose} disabled={loading} className="flex-1 bg-transparent">
               Batal
             </Button>
-            <Button onClick={handleSave} className="flex-1">
-              Simpan
+            <Button onClick={handleSave} disabled={loading} className="flex-1">
+              {loading ? "Menyimpan..." : "Simpan"}
             </Button>
           </div>
         </div>

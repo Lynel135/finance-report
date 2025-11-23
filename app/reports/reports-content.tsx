@@ -103,7 +103,17 @@ export function ReportsContent() {
         Tanggal: new Date(t.created_at).toLocaleDateString("id-ID"),
       }))
 
-      const totalNominal = data.reduce((sum, t) => sum + t.nominal, 0) || 0
+      let totalNominal = 0
+      if (type === "all") {
+        const incomeTotal =
+          approvedTransactions.filter((t) => t.type === "pemasukan").reduce((sum, t) => sum + t.nominal, 0) || 0
+        const expenseTotal =
+          approvedTransactions.filter((t) => t.type === "pengeluaran").reduce((sum, t) => sum + t.nominal, 0) || 0
+        totalNominal = incomeTotal - expenseTotal
+      } else {
+        totalNominal = data.reduce((sum, t) => sum + t.nominal, 0) || 0
+      }
+
       excelData.push({
         "Nama Lengkap": "",
         Username: "TOTAL",

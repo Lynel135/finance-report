@@ -3,6 +3,8 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { TransactionCard } from "@/components/transaction-card"
 import { useAuth } from "@/lib/auth-context"
+import { useEffect, useState } from "react"
+import { supabase } from "@/lib/supabase"
 
 interface Transaction {
   id: number
@@ -16,42 +18,6 @@ interface Transaction {
   created_at: string | Date
 }
 
-const mockTransactions: Transaction[] = [
-  {
-    id: 1,
-    nis: "0002",
-    full_name: "M. Hanan Izzaturrofan",
-    username: "siswa1",
-    nominal: 5000,
-    description: "Pembayaran Kas Mingguan",
-    type: "pemasukan",
-    status: "approved",
-    created_at: new Date("2024-11-03"),
-  },
-  {
-    id: 2,
-    nis: "0002",
-    full_name: "M. Hanan Izzaturrofan",
-    username: "siswa1",
-    nominal: 5000,
-    description: "Pembayaran Kas Mingguan",
-    type: "pemasukan",
-    status: "approved",
-    created_at: new Date("2024-11-03"),
-  },
-  {
-    id: 3,
-    nis: "0002",
-    full_name: "M. Hanan Izzaturrofan",
-    username: "siswa1",
-    nominal: 5000,
-    description: "Pembayaran Kas Mingguan",
-    type: "pemasukan",
-    status: "approved",
-    created_at: new Date("2024-11-03"),
-  },
-]
-
 interface UserTransactionsModalProps {
   isOpen: boolean
   onClose: () => void
@@ -59,9 +25,58 @@ interface UserTransactionsModalProps {
 
 export function UserTransactionsModal({ isOpen, onClose }: UserTransactionsModalProps) {
   const { user } = useAuth()
+  const [userTransactions, setUserTransactions] = useState<Transaction[]>([])
+  const [loading, setLoading] = useState(true)
 
-  // Filter transactions for current user
-  const userTransactions = mockTransactions.filter((t) => t.nis === user?.nis)
+  useEffect(() => {
+    const fetchUserTransactions = async () => {
+      try {
+        setLoading(true)
+
+        const { data, error } = await supabase
+          .from("transactions")
+          .select(`
+            id,
+            nis,
+            nominal,
+            description,
+            type,
+            status,
+            created_at,
+            users (full_name, username)
+          `)
+          .eq("nis", user?.nis)
+          .order("created_at", { ascending: false })
+
+        if (error) {
+          console.error("Error fetching user transactions:", error)
+          setUserTransactions([])
+        } else {
+          const mappedData = (data || []).map((transaction: any) => ({
+            id: transaction.id,
+            nis: transaction.nis,
+            full_name: transaction.users?.full_name || "",
+            username: transaction.users?.username || "",
+            nominal: transaction.nominal,
+            description: transaction.description,
+            type: transaction.type,
+            status: transaction.status,
+            created_at: transaction.created_at,
+          }))
+          setUserTransactions(mappedData)
+        }
+      } catch (error) {
+        console.error("Error:", error)
+        setUserTransactions([])
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    if (isOpen && user) {
+      fetchUserTransactions()
+    }
+  }, [isOpen, user])
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -74,7 +89,7 @@ export function UserTransactionsModal({ isOpen, onClose }: UserTransactionsModal
           {userTransactions.length > 0 ? (
             userTransactions.map((transaction) => <TransactionCard key={transaction.id} transaction={transaction} />)
           ) : (
-            <p className="text-center text-muted-foreground py-8">Belum ada transaksi</p>
+            <p className="text-center text-muted-foreground py-8">{loading ? "Memuat..." : "Belum ada transaksi"}</p>
           )}
         </div>
       </DialogContent>
