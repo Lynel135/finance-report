@@ -10,6 +10,8 @@ interface User {
   full_name: string
   role: "admin" | "user"
   position: string
+  photo_url: string | null
+  bio: string
 }
 
 interface AuthContextType {
@@ -62,6 +64,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           full_name: foundUser.full_name,
           role: foundUser.role,
           position: foundUser.position,
+          photo_url: foundUser.photo_url || null,
+          bio: foundUser.bio || "no bio",
         }
         setUser(userData)
         localStorage.setItem("auth_user", JSON.stringify(userData))
@@ -85,6 +89,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password: "admin123",
         role: "admin",
         position: "Administrator",
+        photo_url: null,
+        bio: "no bio",
       },
       "0002": {
         nis: "0002",
@@ -93,6 +99,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password: "password123",
         role: "user",
         position: "Siswa - X PPLG 1",
+        photo_url: null,
+        bio: "no bio",
       },
       "0003": {
         nis: "0003",
@@ -101,6 +109,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         password: "password456",
         role: "user",
         position: "Siswa - X PPLG 2",
+        photo_url: null,
+        bio: "no bio",
       },
     }
 
@@ -116,6 +126,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         full_name: foundUser.full_name,
         role: foundUser.role,
         position: foundUser.position,
+        photo_url: foundUser.photo_url,
+        bio: foundUser.bio,
       }
       setUser(userData)
       localStorage.setItem("auth_user", JSON.stringify(userData))
