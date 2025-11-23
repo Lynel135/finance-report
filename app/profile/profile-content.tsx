@@ -5,27 +5,40 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
-import { UserIcon, BookOpen, Edit2 } from "lucide-react"
+import { UserIcon, BookOpen, Edit2, LogOut } from "lucide-react"
 import { EditProfileModal } from "./edit-profile-modal"
 import { UserTransactionsModal } from "./user-transactions-modal"
 
 export function ProfileContent() {
-  const { user } = useAuth()
+  const { user, logout } = useAuth()
   const router = useRouter()
   const [showEditModal, setShowEditModal] = useState(false)
   const [showTransactionsModal, setShowTransactionsModal] = useState(false)
 
+  const handleLogout = () => {
+    logout()
+    router.push("/login")
+  }
+
   return (
     <main className="p-4 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Profile</h1>
+        <h1 className="text-3xl font-bold">Profil</h1>
       </div>
 
       {/* Profile Avatar */}
       <div className="flex flex-col items-center py-8">
-        <div className="w-24 h-24 bg-foreground rounded-full flex items-center justify-center mb-4">
-          <UserIcon size={48} className="text-background" />
-        </div>
+        {user?.photo_url ? (
+          <img
+            src={user.photo_url || "/placeholder.svg"}
+            alt={user.full_name}
+            className="w-24 h-24 rounded-full object-cover mb-4"
+          />
+        ) : (
+          <div className="w-24 h-24 bg-foreground rounded-full flex items-center justify-center mb-4">
+            <UserIcon size={48} className="text-background" />
+          </div>
+        )}
         <h2 className="text-2xl font-bold text-center">{user?.full_name}</h2>
         <p className="text-muted-foreground text-center">{user?.position}</p>
       </div>
@@ -59,6 +72,14 @@ export function ProfileContent() {
               <p className="font-medium">{user?.nis}</p>
             </div>
           </div>
+
+          <div className="flex items-start gap-3">
+            <BookOpen size={20} className="mt-1 text-muted-foreground" />
+            <div>
+              <p className="text-sm text-muted-foreground">Bio</p>
+              <p className="font-medium">{user?.bio || "no bio"}</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -71,6 +92,11 @@ export function ProfileContent() {
         <Button onClick={() => setShowEditModal(true)} variant="outline" className="w-full">
           <Edit2 size={18} className="mr-2" />
           Edit Profil
+        </Button>
+
+        <Button onClick={handleLogout} variant="destructive" className="w-full">
+          <LogOut size={18} className="mr-2" />
+          Logout
         </Button>
       </div>
 

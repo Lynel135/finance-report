@@ -3,20 +3,15 @@
 import { usePathname, useRouter } from "next/navigation"
 import { useAuth } from "@/lib/auth-context"
 import Link from "next/link"
-import { LayoutGrid, BarChart3, Plus, User, LogOut } from "lucide-react"
+import { LayoutGrid, BarChart3, Plus, User, Users } from "lucide-react"
 import { useState } from "react"
 import { TransactionModal } from "./transaction-modal"
 
 export function BottomNavigation() {
   const pathname = usePathname()
   const router = useRouter()
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   const [showTransactionModal, setShowTransactionModal] = useState(false)
-
-  const handleLogout = () => {
-    logout()
-    router.push("/login")
-  }
 
   const isActive = (path: string) => pathname === path
 
@@ -52,6 +47,16 @@ export function BottomNavigation() {
         </button>
 
         <Link
+          href="/members"
+          className={`flex flex-col items-center gap-1 p-2 rounded-lg transition-colors ${
+            isActive("/members") ? "text-primary" : "text-muted-foreground"
+          }`}
+        >
+          <Users size={24} />
+          <span className="text-xs">Anggota</span>
+        </Link>
+
+        <Link
           href="/profile"
           className={`flex flex-col items-center gap-1 p-2 rounded-lg transition-colors ${
             isActive("/profile") ? "text-primary" : "text-muted-foreground"
@@ -60,14 +65,6 @@ export function BottomNavigation() {
           <User size={24} />
           <span className="text-xs">Profil</span>
         </Link>
-
-        <button
-          onClick={handleLogout}
-          className="flex flex-col items-center gap-1 p-2 rounded-lg text-muted-foreground hover:text-destructive transition-colors"
-        >
-          <LogOut size={24} />
-          <span className="text-xs">Logout</span>
-        </button>
       </div>
 
       <TransactionModal
