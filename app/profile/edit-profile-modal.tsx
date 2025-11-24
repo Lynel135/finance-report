@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useRef } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
@@ -18,6 +17,7 @@ interface EditProfileModalProps {
 export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
   const { user } = useAuth()
   const fileInputRef = useRef<HTMLInputElement>(null)
+
   const [username, setUsername] = useState(user?.username || "")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -27,6 +27,9 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
   const [loading, setLoading] = useState(false)
   const [photoLoading, setPhotoLoading] = useState(false)
 
+  // -------------------------------
+  // SAVE PROFILE
+  // -------------------------------
   const handleSave = async () => {
     setError("")
 
@@ -46,34 +49,41 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
       const updateData: any = {
         username,
         bio: bio || "no bio",
-      }
-      if (password) {
-        updateData.password = password
+        photo_url: photoUrl || null,
       }
 
-      const { error: updateError } = await supabase.from("users").update(updateData).eq("nis", user?.nis)
+      if (password) updateData.password = password
+
+      const { error: updateError } = await supabase
+        .from("users")
+        .update(updateData)
+        .eq("nis", user?.nis)
 
       if (updateError) {
+        console.error(updateError)
         showErrorNotification("Gagal", "Tidak dapat memperbarui profil")
         return
       }
 
-      // Update localStorage
+      // update localStorage
       if (user) {
-        const updatedUser = { ...user, username, bio: bio || "no bio", photo_url: photoUrl }
-        localStorage.setItem("auth_user", JSON.stringify(updatedUser))
+        const updated = { ...user, ...updateData }
+        localStorage.setItem("auth_user", JSON.stringify(updated))
       }
 
       showSuccessNotification("Berhasil", "Profil berhasil diperbarui")
       onClose()
     } catch (err) {
-      console.error("Error updating profile:", err)
+      console.error(err)
       showErrorNotification("Gagal", "Terjadi kesalahan saat memperbarui profil")
     } finally {
       setLoading(false)
     }
   }
 
+  // -------------------------------
+  // UPLOAD PHOTO
+  // -------------------------------
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -92,60 +102,95 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
       setPhotoLoading(true)
       setError("")
 
-      // Delete old photo if exists
-      if (photoUrl && user?.photo_url) {
-        const oldFilePath = user.photo_url.split("/").pop()
-        if (oldFilePath) {
-          await supabase.storage.from("profile-photos").remove([oldFilePath])
+      // ---------------------------
+      // HAPUS FOTO LAMA
+      // ---------------------------
+      if (user?.photo_url) {
+        const path = user.photo_url.split("/public/")[1] // Ambil path setelah /public/
+        if (path) {
+          await supabase.storage.from("profile-photos").remove([path])
         }
       }
 
-      // Upload new photo
-      const fileName = `${user?.nis}-${Date.now()}`
-      const { data, error: uploadError } = await supabase.storage.from("profile-photos").upload(fileName, file)
+      // ---------------------------
+      // UPLOAD FOTO BARU
+      // ---------------------------
+      const ext = file.name.split(".").pop()
+      const fileName = `${user?.nis}-${Date.now()}.${ext}`
+
+      const { error: uploadError } = await supabase.storage
+        .from("profile-photos")
+        .upload(fileName, file)
 
       if (uploadError) {
+        console.error(uploadError)
         setError("Gagal upload foto")
         return
       }
 
-      // Get public URL
-      const { data: publicData } = supabase.storage.from("profile-photos").getPublicUrl(fileName)
+      // ---------------------------
+      // GET PUBLIC URL
+      // ---------------------------
+      const { data: publicData } = await supabase.storage
+        .from("profile-photos")
+        .getPublicUrl(fileName)
 
-      setPhotoUrl(publicData.publicUrl)
+      const finalUrl = publicData.publicUrl
+      setPhotoUrl(finalUrl)
+
+      // ---------------------------
+      // UPDATE DB
+      // ---------------------------
+      await supabase.from("users")
+        .update({ photo_url: finalUrl })
+        .eq("nis", user?.nis)
+
+      // update localStorage
+      const updatedUser = { ...user, photo_url: finalUrl }
+      localStorage.setItem("auth_user", JSON.stringify(updatedUser))
+
       showSuccessNotification("Berhasil", "Foto profil berhasil diupload")
     } catch (err) {
-      console.error("Error uploading photo:", err)
+      console.error(err)
       setError("Gagal upload foto")
     } finally {
       setPhotoLoading(false)
     }
   }
 
+  // -------------------------------
+  // DELETE PHOTO
+  // -------------------------------
   const handleDeletePhoto = async () => {
     try {
       setPhotoLoading(true)
 
-      if (photoUrl && user?.photo_url) {
-        const oldFilePath = user.photo_url.split("/").pop()
-        if (oldFilePath) {
-          await supabase.storage.from("profile-photos").remove([oldFilePath])
-        }
+      if (user?.photo_url) {
+        const path = user.photo_url.split("/public/")[1]
+        if (path) await supabase.storage.from("profile-photos").remove([path])
       }
 
-      // Update database to remove photo
-      await supabase.from("users").update({ photo_url: null }).eq("nis", user?.nis)
+      await supabase.from("users")
+        .update({ photo_url: null })
+        .eq("nis", user?.nis)
 
       setPhotoUrl("")
+
+      const updated = { ...user, photo_url: null }
+      localStorage.setItem("auth_user", JSON.stringify(updated))
+
       showSuccessNotification("Berhasil", "Foto profil berhasil dihapus")
     } catch (err) {
-      console.error("Error deleting photo:", err)
+      console.error(err)
       setError("Gagal menghapus foto")
     } finally {
       setPhotoLoading(false)
     }
   }
 
+  // -------------------------------
+  // UI
+  // -------------------------------
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-md" aria-describedby="edit-profile-modal-description">
@@ -154,25 +199,23 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
         </DialogHeader>
 
         <div className="space-y-4">
-          {/* Photo Upload Section */}
+          {/* Photo Upload */}
           <div>
             <label className="block text-sm font-medium mb-2">Foto Profil</label>
             <div className="flex flex-col items-center gap-3">
               {photoUrl ? (
                 <img
-                  src={photoUrl || "/placeholder.svg"}
+                  src={photoUrl}
                   alt="Foto Profil"
                   className="w-20 h-20 rounded-lg object-cover"
-                  onError={(e) => {
-                    console.log("[v0] Image failed to load:", photoUrl)
-                    e.currentTarget.src = "/default-profile-avatar.png"
-                  }}
+                  onError={(e) => (e.currentTarget.src = "/default-profile-avatar.png")}
                 />
               ) : (
                 <div className="w-20 h-20 bg-muted rounded-lg flex items-center justify-center">
                   <Upload size={24} className="text-muted-foreground" />
                 </div>
               )}
+
               <div className="flex gap-2 w-full">
                 <Button
                   onClick={() => fileInputRef.current?.click()}
@@ -183,12 +226,19 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
                   <Upload size={16} className="mr-1" />
                   Upload
                 </Button>
+
                 {photoUrl && (
-                  <Button onClick={handleDeletePhoto} disabled={photoLoading} variant="destructive" size="sm">
+                  <Button
+                    onClick={handleDeletePhoto}
+                    disabled={photoLoading}
+                    variant="destructive"
+                    size="sm"
+                  >
                     <Trash2 size={16} />
                   </Button>
                 )}
               </div>
+
               <input
                 ref={fileInputRef}
                 type="file"
@@ -197,10 +247,14 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
                 disabled={photoLoading}
                 className="hidden"
               />
-              <p className="text-xs text-muted-foreground text-center">Max 512KB, JPG/PNG/WebP</p>
+
+              <p className="text-xs text-muted-foreground text-center">
+                Max 512KB, JPG/PNG/WebP
+              </p>
             </div>
           </div>
 
+          {/* Username */}
           <div>
             <label className="block text-sm font-medium mb-2">Username</label>
             <input
@@ -208,24 +262,24 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               disabled={loading}
-              className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+              className="w-full px-3 py-2 border border-input rounded-lg"
             />
           </div>
 
+          {/* Bio */}
           <div>
             <label className="block text-sm font-medium mb-2">Bio</label>
             <textarea
               value={bio}
               onChange={(e) => setBio(e.target.value.slice(0, 500))}
               disabled={loading}
-              maxLength={500}
-              className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 resize-none"
               rows={3}
-              placeholder="Tulis bio Anda..."
+              className="w-full px-3 py-2 border border-input rounded-lg resize-none"
             />
             <p className="text-xs text-muted-foreground mt-1">{bio.length}/500</p>
           </div>
 
+          {/* Password */}
           <div>
             <label className="block text-sm font-medium mb-2">Password Baru (Opsional)</label>
             <input
@@ -234,10 +288,11 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={loading}
-              className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+              className="w-full px-3 py-2 border border-input rounded-lg"
             />
           </div>
 
+          {/* Confirm Password */}
           <div>
             <label className="block text-sm font-medium mb-2">Konfirmasi Password</label>
             <input
@@ -246,16 +301,17 @@ export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               disabled={loading}
-              className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+              className="w-full px-3 py-2 border border-input rounded-lg"
             />
           </div>
 
           {error && <div className="text-destructive text-sm">{error}</div>}
 
           <div className="flex gap-2 pt-4">
-            <Button variant="outline" onClick={onClose} disabled={loading} className="flex-1 bg-transparent">
+            <Button variant="outline" onClick={onClose} disabled={loading} className="flex-1">
               Batal
             </Button>
+
             <Button onClick={handleSave} disabled={loading || photoLoading} className="flex-1">
               {loading ? "Menyimpan..." : "Simpan"}
             </Button>
