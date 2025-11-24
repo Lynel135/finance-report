@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-export default function EditProfileModal({ user, isOpen, onClose, onUpdate }) {
+export function EditProfileModal({ user, isOpen, onClose, onUpdate }) {
   const [name, setName] = useState(user?.name || "");
   const [photoUrl, setPhotoUrl] = useState(user?.photo_url || "");
   const [isLoading, setIsLoading] = useState(false);
