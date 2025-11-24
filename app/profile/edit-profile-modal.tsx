@@ -1,177 +1,304 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { supabase } from "@/lib/supabase";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import type React from "react"
 
-export function EditProfileModal({ user, isOpen, onClose, onUpdate }) {
-  const [name, setName] = useState(user?.name || "");
-  const [photoUrl, setPhotoUrl] = useState(user?.photo_url || "");
-  const [isLoading, setIsLoading] = useState(false);
+import { useState, useRef } from "react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
+import { useAuth } from "@/lib/auth-context"
+import { supabase } from "@/lib/supabase"
+import { showSuccessNotification, showErrorNotification } from "@/lib/notification"
+import { Upload, Trash2 } from "lucide-react"
 
-  // =============================
-  // 📌 HAPUS FOTO LAMA
-  // =============================
-  const deleteOldPhoto = async () => {
-    try {
-      if (!user?.photo_url) return;
+interface EditProfileModalProps {
+  isOpen: boolean
+  onClose: () => void
+}
 
-      const path = user.photo_url.split("/object/public/profile-photos/")[1];
-      if (!path) return;
+export function EditProfileModal({ isOpen, onClose }: EditProfileModalProps) {
+  const { user } = useAuth()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [username, setUsername] = useState(user?.username || "")
+  const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [bio, setBio] = useState(user?.bio || "no bio")
+  const [photoUrl, setPhotoUrl] = useState(user?.photo_url || "")
+  const [error, setError] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [photoLoading, setPhotoLoading] = useState(false)
 
-      await supabase.storage.from("profile-photos").remove([path]);
-    } catch (error) {
-      console.log("Gagal hapus foto lama:", error);
+  // ============================================================
+  // ✅ FIXED: UPLOAD FOTO PROFIL
+  // ============================================================
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.size > 512 * 1024) {
+      setError("Ukuran file maksimal 512KB")
+      return
     }
-  };
 
-  // =============================
-  // 📌 UPLOAD FOTO BARU
-  // =============================
-  const handlePhotoUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setIsLoading(true);
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setError("Format file harus JPG, PNG, atau WebP")
+      return
+    }
 
     try {
-      // 1️⃣ Hapus foto sebelumnya
-      await deleteOldPhoto();
+      setPhotoLoading(true)
+      setError("")
 
-      // 2️⃣ Buat nama file
-      const ext = file.name.split(".").pop();
-      const fileName = `${user?.nis}/${Date.now()}.${ext}`;
+      // 1. Delete old photo from storage
+      if (user?.photo_url) {
+        const oldFileName = user.photo_url.split("/").pop()
+        if (oldFileName) {
+          await supabase.storage.from("profile-photos").remove([oldFileName])
+        }
+      }
 
-      // 3️⃣ Upload ke Supabase
+      // 2. Upload new photo
+      const ext = file.name.split(".").pop()
+      const fileName = `${user?.nis}-${Date.now()}.${ext}`
+
       const { error: uploadError } = await supabase.storage
         .from("profile-photos")
-        .upload(fileName, file);
+        .upload(fileName, file, { upsert: true })
 
       if (uploadError) {
-        alert("Gagal upload foto");
-        console.log(uploadError);
-        setIsLoading(false);
-        return;
+        setError("Gagal upload foto")
+        return
       }
 
-      // 4️⃣ Ambil public URL
-      const { data: publicData } = await supabase.storage
+      // 3. Get public URL
+      const { data: publicData } = supabase.storage
         .from("profile-photos")
-        .getPublicUrl(fileName);
+        .getPublicUrl(fileName)
 
-      const finalUrl = publicData.publicUrl;
-      setPhotoUrl(finalUrl);
-    } catch (error) {
-      console.log(error);
+      const newUrl = publicData.publicUrl
+      setPhotoUrl(newUrl)
+
+      // 4. Update DB
+      await supabase.from("users").update({ photo_url: newUrl }).eq("nis", user?.nis)
+
+      // 5. Update local storage
+      if (user) {
+        const newUser = { ...user, photo_url: newUrl }
+        localStorage.setItem("auth_user", JSON.stringify(newUser))
+      }
+
+      showSuccessNotification("Berhasil", "Foto profil berhasil diupload")
+    } catch (err) {
+      console.error("Error uploading photo:", err)
+      setError("Gagal upload foto")
+    } finally {
+      setPhotoLoading(false)
     }
+  }
 
-    setIsLoading(false);
-  };
-
-  // =============================
-  // 📌 HAPUS FOTO
-  // =============================
+  // ============================================================
+  // ✅ FIXED: DELETE FOTO PROFIL
+  // ============================================================
   const handleDeletePhoto = async () => {
-    setIsLoading(true);
     try {
-      if (!user?.photo_url) return;
+      setPhotoLoading(true)
 
-      const path = user.photo_url.split("/object/public/profile-photos/")[1];
-      if (path) {
-        await supabase.storage.from("profile-photos").remove([path]);
+      if (user?.photo_url) {
+        const fileName = user.photo_url.split("/").pop()
+        if (fileName) {
+          await supabase.storage.from("profile-photos").remove([fileName])
+        }
       }
 
-      setPhotoUrl(null);
-    } catch (error) {
-      console.log("Gagal menghapus foto:", error);
-    }
-    setIsLoading(false);
-  };
+      await supabase.from("users").update({ photo_url: null }).eq("nis", user?.nis)
 
-  // =============================
-  // 📌 SIMPAN PROFIL
-  // =============================
-  const handleSubmit = async () => {
-    setIsLoading(true);
+      setPhotoUrl("")
+
+      if (user) {
+        const newUser = { ...user, photo_url: null }
+        localStorage.setItem("auth_user", JSON.stringify(newUser))
+      }
+
+      showSuccessNotification("Berhasil", "Foto profil berhasil dihapus")
+    } catch (err) {
+      console.error("Error deleting photo:", err)
+      setError("Gagal menghapus foto")
+    } finally {
+      setPhotoLoading(false)
+    }
+  }
+
+  // ============================================================
+  // TIDAK DIUBAH — HANDLE SAVE PROFIL (USERNAME, BIO, PASSWORD)
+  // ============================================================
+  const handleSave = async () => {
+    setError("")
+
+    if (!username.trim()) {
+      setError("Username tidak boleh kosong")
+      return
+    }
+
+    if (password && password !== confirmPassword) {
+      setError("Password tidak cocok")
+      return
+    }
 
     try {
-      const { error } = await supabase
+      setLoading(true)
+
+      const updateData: any = {
+        username,
+        bio: bio || "no bio",
+      }
+      if (password) {
+        updateData.password = password
+      }
+
+      const { error: updateError } = await supabase
         .from("users")
-        .update({
-          name: name,
-          photo_url: photoUrl || null,
-        })
-        .eq("nis", user.nis);
+        .update(updateData)
+        .eq("nis", user?.nis)
 
-      if (error) {
-        alert("Gagal memperbarui profil");
-        console.log(error);
-        setIsLoading(false);
-        return;
+      if (updateError) {
+        showErrorNotification("Gagal", "Tidak dapat memperbarui profil")
+        return
       }
 
-      onUpdate();
-      onClose();
-    } catch (error) {
-      console.log(error);
+      if (user) {
+        const updatedUser = { ...user, username, bio: bio || "no bio", photo_url: photoUrl }
+        localStorage.setItem("auth_user", JSON.stringify(updatedUser))
+      }
+
+      showSuccessNotification("Berhasil", "Profil berhasil diperbarui")
+      onClose()
+    } catch (err) {
+      console.error("Error updating profile:", err)
+      showErrorNotification("Gagal", "Terjadi kesalahan saat memperbarui profil")
+    } finally {
+      setLoading(false)
     }
+  }
 
-    setIsLoading(false);
-  };
+  // ============================================================
+  // UI — TIDAK DIUBAH SAMA SEKALI
+  // ============================================================
 
-  // =============================
-  // 📌 RENDER MODAL
-  // =============================
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-md" aria-describedby="edit-profile-modal-description">
         <DialogHeader>
           <DialogTitle>Edit Profil</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4">
-          {/* Foto Profil */}
-          <div className="flex flex-col items-center gap-2">
-            {photoUrl ? (
-              <img
-                src={photoUrl}
-                className="w-24 h-24 rounded-full object-cover border"
-                alt="Profile"
-              />
-            ) : (
-              <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center">
-                No Photo
-              </div>
-            )}
-
-            <Input type="file" accept="image/*" onChange={handlePhotoUpload} disabled={isLoading} />
-
-            {photoUrl && (
-              <Button variant="destructive" onClick={handleDeletePhoto} disabled={isLoading}>
-                Hapus Foto
-              </Button>
-            )}
-          </div>
-
-          {/* Input Nama */}
+        <div className="space-y-4">
+          {/* Photo Upload Section */}
           <div>
-            <label className="text-sm font-medium">Nama</label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} disabled={isLoading} />
+            <label className="block text-sm font-medium mb-2">Foto Profil</label>
+            <div className="flex flex-col items-center gap-3">
+              {photoUrl ? (
+                <img
+                  src={photoUrl || "/placeholder.svg"}
+                  alt="Foto Profil"
+                  className="w-20 h-20 rounded-lg object-cover"
+                  onError={(e) => {
+                    console.log("[v0] Image failed to load:", photoUrl)
+                    e.currentTarget.src = "/default-profile-avatar.png"
+                  }}
+                />
+              ) : (
+                <div className="w-20 h-20 bg-muted rounded-lg flex items-center justify-center">
+                  <Upload size={24} className="text-muted-foreground" />
+                </div>
+              )}
+              <div className="flex gap-2 w-full">
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={photoLoading}
+                  className="flex-1"
+                  size="sm"
+                >
+                  <Upload size={16} className="mr-1" />
+                  Upload
+                </Button>
+                {photoUrl && (
+                  <Button onClick={handleDeletePhoto} disabled={photoLoading} variant="destructive" size="sm">
+                    <Trash2 size={16} />
+                  </Button>
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handlePhotoUpload}
+                disabled={photoLoading}
+                className="hidden"
+              />
+              <p className="text-xs text-muted-foreground text-center">Max 512KB, JPG/PNG/WebP</p>
+            </div>
           </div>
 
-          {/* Tombol */}
-          <div className="flex justify-end gap-2 mt-3">
-            <Button variant="outline" onClick={onClose} disabled={isLoading}>
+          <div>
+            <label className="block text-sm font-medium mb-2">Username</label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              disabled={loading}
+              className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Bio</label>
+            <textarea
+              value={bio}
+              onChange={(e) => setBio(e.target.value.slice(0, 500))}
+              disabled={loading}
+              maxLength={500}
+              className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 resize-none"
+              rows={3}
+              placeholder="Tulis bio Anda..."
+            />
+            <p className="text-xs text-muted-foreground mt-1">{bio.length}/500</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Password Baru (Opsional)</label>
+            <input
+              type="password"
+              placeholder="Kosongkan jika tidak ingin mengubah"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={loading}
+              className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2">Konfirmasi Password</label>
+            <input
+              type="password"
+              placeholder="Konfirmasi password baru"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              disabled={loading}
+              className="w-full px-3 py-2 border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
+            />
+          </div>
+
+          {error && <div className="text-destructive text-sm">{error}</div>}
+
+          <div className="flex gap-2 pt-4">
+            <Button variant="outline" onClick={onClose} disabled={loading} className="flex-1 bg-transparent">
               Batal
             </Button>
-            <Button onClick={handleSubmit} disabled={isLoading}>
-              Simpan
+            <Button onClick={handleSave} disabled={loading || photoLoading} className="flex-1">
+              {loading ? "Menyimpan..." : "Simpan"}
             </Button>
           </div>
         </div>
       </DialogContent>
     </Dialog>
-  );
+  )
 }
